@@ -1,59 +1,52 @@
 # Predicting Late Deliveries in Brazilian E-Commerce
 
-**A business-focused machine learning project using the Olist Brazilian E-Commerce dataset**
+**A business-focused analytics and machine-learning case study using the Olist marketplace dataset**
 
-[![Python](https://img.shields.io/badge/Python-Data%20Analysis-blue)](https://www.python.org/)
-[![Machine Learning](https://img.shields.io/badge/ML-Binary%20Classification-orange)](https://scikit-learn.org/)
-[![Dataset](https://img.shields.io/badge/Data-Olist%20E--Commerce-informational)](https://www.kaggle.com/olistbr/brazilian-ecommerce)
-
-> **Project status: exploratory prototype.** The workflow demonstrates delivery-risk feature engineering and time-aware model evaluation. However, the current held-out test results show weak detection of late deliveries, so the model should not be treated as production-ready without further validation and threshold tuning.
+[![Python](https://img.shields.io/badge/Python-Data%20Analysis-blue)](https://www.python.org/) [![Scikit-learn](https://img.shields.io/badge/Scikit--learn-Classification-orange)](https://scikit-learn.org/) [![Dataset](https://img.shields.io/badge/Data-Olist%20E--Commerce-informational)](https://www.kaggle.com/olistbr/brazilian-ecommerce)
 
 ## Executive summary
 
-Late deliveries can reduce customer trust, increase support workload, and make delivery promises less reliable. This project uses historical Olist marketplace orders to investigate whether order, seller, product, timing, and geographic characteristics can help identify orders that may arrive after their estimated delivery date.
+Late deliveries can erode customer trust, increase customer-service workload, and undermine the reliability of delivery promises. This project uses historical Olist orders to explore which order, seller, product, geographic, and timing characteristics are associated with late delivery, and to test whether those signals can support earlier operational attention.
 
-The notebook joins several Olist tables, engineers order-level features, and compares Logistic Regression, Random Forest, and XGBoost under different approaches to class imbalance. It uses a chronological train/test split and time-series cross-validation rather than relying only on a random split.
+The project combines exploratory data analysis (EDA), order-level feature engineering, interpretable Logistic Regression, Random Forest and XGBoost experiments, and time-aware validation. Its main value is a **business-oriented view of delivery risk**: delivery-window length, seller-to-customer distance, calendar patterns, and regional differences emerge as useful areas for further investigation. The model is an exploratory baseline rather than a production alerting system; held-out late-order recall is low at the tested threshold, likely reflecting class imbalance, temporal variation, and limited operational signals in the historical data.
 
-The most important finding is not that the current model is ready to deploy, but that **model selection results do not yet translate into strong performance on later orders**. Class-weighted Logistic Regression achieved the highest cross-validation recall in the notebook (**0.740**), but its held-out test recall was only **0.17** at a probability threshold of 0.60. This gap needs to be investigated before using the predictions for operational decisions.
+### Key takeaways
 
-| Project component | Current implementation / result |
-|---|---|
-| Prediction target | Late vs. on-time delivery |
-| Modeling unit | One row per order after aggregation |
-| Final modeling dataset | 95,969 orders |
-| Time-based test set | 19,194 orders, dated 26 May–29 August 2018 |
-| Main engineered signals | Seller-to-customer distance, delivery windows, seller history, product size/weight, order value/freight, calendar events, product category and customer state |
-| Models explored | Logistic Regression, Random Forest, XGBoost |
-| Imbalance strategies | No explicit balancing, class weights / positive-class weighting, and SMOTE |
-| Current held-out result for late orders | Precision **0.14**, recall **0.17**, F1 **0.15** |
-| Overall assessment | Useful analytical baseline; additional validation and model development are required |
+- Late deliveries represent a minority class (about **8.1%** in the order-level EDA), making recall and precision-recall evaluation more informative than accuracy alone.
+- Orders with very short promised delivery windows have a substantially higher observed late rate; the rate also varies by month and geography.
+- In the final class-weighted Logistic Regression coefficient plot, **promised delivery window** has the strongest negative coefficient, while **average seller-to-customer distance** and selected regional/month indicators have positive coefficients.
+- The corrected Random Forest + SMOTE experiment achieved **0.5933 mean cross-validation recall** using a pipeline, compared with **0.7397** for class-weighted Logistic Regression under the notebook's recall-scoring setup.
+- The findings can inform delivery-promise reviews, geographic monitoring, seller scorecards, and the design of an operational risk-triage pilot.
 
 ## Contents
 
 - [Business background](#business-background)
-- [Problem statement](#problem-statement)
+- [Business problem and objectives](#business-problem-and-objectives)
 - [Dataset and scope](#dataset-and-scope)
+- [Exploratory data analysis](#exploratory-data-analysis)
 - [Analytical workflow](#analytical-workflow)
 - [Feature engineering](#feature-engineering)
-- [Modeling strategy](#modeling-strategy)
+- [Modeling and validation](#modeling-and-validation)
 - [Results and interpretation](#results-and-interpretation)
+- [What the coefficients tell us](#what-the-coefficients-tell-us)
 - [Business recommendations](#business-recommendations)
 - [Limitations and next steps](#limitations-and-next-steps)
 - [Reproducing the analysis](#reproducing-the-analysis)
-- [Suggested repository structure](#suggested-repository-structure)
-- [References and data attribution](#references-and-data-attribution)
+- [Publishing the interactive map on GitHub](#publishing-the-interactive-map-on-github)
+- [Repository structure](#repository-structure)
+- [References](#references)
 
 ## Business background
 
-Olist is a Brazilian marketplace platform connecting sellers with customers across Brazil. The public dataset contains roughly 100,000 orders from 2016–2018 and related information about orders, items, customers, sellers, products, freight, and geolocation. The dataset is multi-table: one order may contain multiple items, and items in the same order may be fulfilled by different sellers.
+Olist is a Brazilian e-commerce marketplace connecting sellers with customers across Brazil. Its public dataset contains approximately 100,000 orders from 2016–2018 and linked information about orders, order items, customers, sellers, products, freight, reviews, payments, and geolocation.
 
-Delivery performance is an operational concern because a late order can result in customer dissatisfaction, additional service contacts, and reduced confidence in estimated delivery dates. A useful early-warning system would allow an operations team to investigate risky shipments while there is still time to intervene.
+Delivery performance is not determined by one factor alone. The distance between a seller and a customer, time allowed for seller handling and delivery, parcel characteristics, regional conditions, seller operating history, and seasonal volume may all be relevant. Identifying patterns in these dimensions can help an operations team prioritize investigation and evaluate whether delivery promises reflect historical performance.
 
-This project focuses on **risk identification**, not on proving the causes of delivery delays. Feature relationships found by a classifier should be treated as predictive associations until they are validated with operational data or controlled interventions.
+This project focuses on **identifying patterns and potential risk signals**, not proving that a feature causes a delivery to be late.
 
-## Problem statement
+## Business problem and objectives
 
-The task is a binary classification problem. For each historical order:
+The task is binary classification at the order level:
 
 \[
 \text{late\_delivery} =
@@ -63,239 +56,347 @@ The task is a binary classification problem. For each historical order:
 \end{cases}
 \]
 
-The objective is to estimate the risk of a late delivery using information that would be available when the order is placed or early in fulfillment. In a live implementation, predictions should be generated before the delivery outcome is known.
+The objective is to estimate late-delivery risk from features that could be available at order placement or early fulfillment, then translate the patterns into operational questions and potential interventions.
 
-### Business questions
+The analysis addresses four questions:
 
-1. Can order and logistics characteristics help flag potentially late deliveries?
-2. How do geographic distance, promised delivery windows, parcel characteristics, seller history, and seasonal context relate to delivery risk?
-3. Does addressing class imbalance improve the model's ability to detect late deliveries?
-4. Can the model provide a useful prioritization signal for operations without generating an unmanageable number of false alerts?
+1. Which geographic, timing, seller, freight, and product signals are associated with late delivery?
+2. How does the observed late rate differ across shipping windows, promised delivery windows, customer states, and purchase months?
+3. How do class weights and SMOTE affect the ability of different models to detect the late-delivery class?
+4. What operational actions could be informed by the results, and what additional validation is needed before live use?
 
 ## Dataset and scope
 
 **Source:** [Brazilian E-Commerce Public Dataset by Olist on Kaggle](https://www.kaggle.com/olistbr/brazilian-ecommerce).
 
-The notebook primarily joins the following source tables:
-
-| Table | Role in the analysis |
+| Source table | Use in this project |
 |---|---|
-| `olist_orders_dataset.csv` | Order status, purchase timestamp, actual delivery date, estimated delivery date |
+| `olist_orders_dataset.csv` | Purchase and delivery timestamps, order status, actual and estimated delivery dates |
+| `olist_order_items_dataset.csv` | Item price, freight, seller and product references |
 | `olist_customers_dataset.csv` | Customer location and ZIP-code prefix |
-| `olist_order_items_dataset.csv` | Item-level price, freight, seller, and product references |
-| `olist_products_dataset.csv` | Product category, weight, and dimensions |
-| `olist_sellers_dataset.csv` | Seller location and seller reference |
-| `olist_geolocation_dataset.csv` | ZIP-code prefix to latitude/longitude mapping |
+| `olist_sellers_dataset.csv` | Seller reference and location |
+| `olist_products_dataset.csv` | Product category, weight and dimensions |
+| `olist_geolocation_dataset.csv` | ZIP-code prefix mapped to latitude and longitude |
 
-Review and payment files are also loaded as optional inputs in the notebook, but they are not part of the core model feature set described here.
+The notebook joins the tables, engineers item- and order-level variables, and consolidates multi-item orders into a modeling table. The final modeling dataset contains **95,969 orders**. The latest 20% of records is held out chronologically for testing: **19,194 orders from 26 May to 29 August 2018**, comprising 1,013 late and 18,181 on-time deliveries.
 
-### Data preparation choices
+Preparation includes date conversion, missing-value handling, reduction of duplicate geolocation ZIP-code records, product-category handling, distance calculation, seller-history features, and one-hot encoding. Order IDs and purchase timestamps are excluded from the model feature matrix; the timestamp is retained separately to preserve chronological splitting.
 
-- Rows missing required order timestamps are removed so the target can be derived from observed delivery outcomes.
-- Duplicate geolocation ZIP-code prefixes are reduced to one coordinate record before joining.
-- Product dimensions are cleaned; missing product categories are grouped as `Other`.
-- Customer and seller coordinates are joined to estimate the distance between the two locations.
-- Item-level records are consolidated into a single order-level modeling table.
+## Exploratory data analysis
 
-After the notebook's joins and order-level aggregation, the final modeling table contains **95,969 orders**. The time-ordered split reserves the latest 20% (19,194 orders) for testing, covering **26 May–29 August 2018**. The held-out set contains 1,013 late orders and 18,181 on-time orders, so only **5.28%** of the test set is late.
+EDA is used to understand the target distribution, order mix, delivery-time features, geographic variation, and changes over time. The figures below are exported from the notebook, with a static preview of the same state-level map data alongside the interactive map HTML.
 
-> The target depends on the actual delivery date, so the historical training sample necessarily contains orders with known outcomes. For operational predictions, only pre-delivery features should be supplied; future delivery information must never enter the model inputs.
+### 1. Late versus on-time deliveries
+
+![Late versus on-time deliveries](assets/figures/eda_late_vs_on_time_share.png)
+
+The order-level chart shows approximately **91.9% on-time and 8.1% late deliveries**. That imbalance matters: a classifier can appear accurate by predicting the majority class while failing to identify late orders. The modeling comparison therefore tracks **recall for late orders**, and a future operational evaluation should also track precision, PR-AUC, calibration, and the number of alerts generated.
+
+### 2. Product and geographic distribution
+
+<p align="center">
+  <img src="assets/figures/eda_top_product_categories.png" alt="Top 20 product categories in the joined data" width="48%">
+  <img src="assets/figures/eda_orders_by_state.png" alt="Distribution by customer state" width="48%">
+</p>
+
+The category chart is concentrated in categories such as **bed/bath/table**, **health/beauty**, and **sports/leisure**. The state distribution is strongly concentrated in **São Paulo**, followed by other large southern and southeastern states. These are volume charts, not late-rate charts, and the notebook creates them before its final order-level aggregation; counts therefore reflect joined records rather than a clean count of unique orders. Their business use is to show where the data is concentrated and where volume-aware, order-level segment analysis is needed—not to claim that the largest categories or states are necessarily the riskiest.
+
+### 3. Geographic variation in late-delivery rate
+
+![State-level late-delivery rate map](assets/figures/eda_late_delivery_rate_brazil_map.png)
+
+The notebook's exploratory state map shows a wide range of observed rates, from about **3.3% in Acre (AC)** to **24.2% in Alagoas (AL)**. Maranhão (MA) and Sergipe (SE) are also among the higher-rate states in this version of the map. The variation suggests that national averages can hide regional differences and supports further investigation by state and delivery lane.
+
+**Interpretation caveat:** the original notebook calculates the map from `df_full_v1`, before the final order-level aggregation. Multi-item orders can consequently receive more weight than single-item orders, and states have very different sample sizes. Treat this as a geographic exploration, not a final state-performance ranking. Before using it for business decisions, recompute the map from one row per order and show order counts in each state's tooltip.
+
+The notebook's interactive Folium map is included at [`docs/late_delivery_rate_brazil_map.html`](docs/late_delivery_rate_brazil_map.html). See [Publishing the interactive map on GitHub](#publishing-the-interactive-map-on-github) for how to host it so visitors can use the zoom and hover tooltips.
+
+### 4. Distance, purchase timing, and shipping-window distributions
+
+![Distributions of distance, purchase weekday, and purchase hour](assets/figures/eda_numeric_feature_distributions.png)
+
+The distributions of `avg_distance_km` and `max_distance_km` are right-skewed: most records fall closer to the lower end, with a long tail of longer-distance deliveries. Purchase counts also vary by weekday and hour, suggesting that order volume is not evenly distributed over the week or day. This motivates checking risk by delivery lane and examining whether staffing and handoff schedules line up with order-arrival patterns.
+
+![Shipping-window distribution](assets/figures/eda_shipping_window_distribution.png)
+
+Most `shipping_window_days` values cluster around a few days; the notebook's summary reports a median of roughly **6 days** and a 75th percentile of roughly **7.2 days**. The distribution also contains an extreme tail (the reported maximum exceeds 1,000 days). Such values should be checked for timestamp or data-quality issues before being interpreted as real fulfillment behavior.
+
+### 5. Observed late rate by shipping and promised delivery windows
+
+![Late rate by seller shipping-window period](assets/figures/eda_late_rate_by_shipping_window.png)
+
+The grouped shipping-window results in the notebook are:
+
+| Seller shipping-window period | Observed late rate |
+|---|---:|
+| 1–7 days | 8.40% |
+| 8–14 days | 6.98% |
+| 15–22 days | 7.97% |
+| 23+ days | 6.09% |
+
+The pattern is **not monotonic**. The 1–7-day group is slightly above the overall rate (about 8.1%), but the 15–22-day group is also relatively high, while the 23+ day group is lower. This cautions against using seller shipping-window length alone as a simple rule; its relationship may depend on seller, distance, and the promised delivery window.
+
+![Promised delivery-window distribution](assets/figures/eda_promised_window_distribution.png)
+
+![Late rate by promised delivery-window period](assets/figures/eda_late_rate_by_promised_window.png)
+
+The promised delivery-window chart shows a clearer risk signal: orders given only **1–7 days** have a visibly higher late rate than the overall baseline, while most longer-window groups are lower or closer to the baseline. This fits the operational intuition that a short promise leaves less buffer for delays. The notebook's bucket label `16–28days` does not match its underlying 21–28-day interval; correct this label and check group sizes before quoting exact rates for each bin.
+
+### 6. Monthly variation
+
+![Monthly late-delivery rate](assets/figures/eda_monthly_late_delivery_rate.png)
+
+Monthly outcomes vary substantially. In the notebook's order-level monthly table, observed late rates rise to about **14.3% in November 2017**, **16.0% in February 2018**, and **21.4% in March 2018**, before falling to **5.3% in April 2018** and **1.4% in June 2018**. Some early months contain only one or a few records; for example, the 100% rate in September 2016 comes from a single order and should not be interpreted as a stable trend.
+
+This variability helps explain why time-aware validation matters. It also suggests checking historical delivery promises and capacity around higher-risk periods. The chart alone cannot tell us whether the change came from promotions, carriers, seller operations, estimates, or another factor; those causes need more granular operational data.
+
+### EDA synthesis: what should the business take away?
+
+The EDA points to four practical areas: **promise-window design**, **long-distance delivery lanes**, **seasonal monitoring**, and **regional analysis with sufficient sample sizes**. It also shows why one national average and one accuracy score are insufficient. These observations inform the feature engineering and business actions below; they should be validated on the final one-row-per-order data and, ideally, a more recent period.
 
 ## Analytical workflow
 
 ```mermaid
 flowchart TD
-    A[Olist source CSVs] --> B[Clean and join order, item, customer, seller, product, and geo data]
-    B --> C[Create late-delivery label and order-level records]
-    C --> D[Engineer distance, delivery-window, seller-history, product, and calendar features]
-    D --> E[Encode categories and build interaction features]
-    E --> F[Sort orders chronologically]
-    F --> G[80% historical train/validation period]
-    F --> H[Latest 20% chronological holdout]
-    G --> I[5-fold TimeSeriesSplit model comparison]
-    I --> J[Compare class weights, positive-class weighting, and SMOTE]
-    J --> K[Evaluate on the untouched holdout]
-    H --> K
-    K --> L[Operational recommendations and further validation]
+    A[Olist source tables] --> B[Clean and join order, item, customer, seller, product and geolocation data]
+    B --> C[Explore target, order mix, delivery windows, geography and monthly trends]
+    C --> D[Create the late-delivery target and consolidate to order level]
+    D --> E[Engineer distance, seller-history, product, freight and calendar features]
+    E --> F[Encode categories and construct selected interaction features]
+    F --> G[Sort chronologically and split development from holdout]
+    G --> H[Five-fold TimeSeriesSplit model selection]
+    H --> I[Compare class weighting and SMOTE pipelines]
+    I --> J[Evaluate on later-period holdout]
+    J --> K[Translate signals into business recommendations]
 ```
 
-### Step-by-step approach
-
-1. **Join and clean the data.** Combine order, item, customer, seller, product, and geolocation information, handling missing values and duplicate ZIP-code mappings.
-2. **Define the target.** Label an order as late when its actual customer delivery date is after the estimated delivery date.
-3. **Engineer logistics and context features.** Calculate seller-to-customer distance and derive shipping windows, promised delivery windows, product dimensions, seller history, and calendar indicators.
-4. **Aggregate to order level.** Summarize multi-item orders into order totals and order-level product/geographic features.
-5. **Prepare model inputs.** One-hot encode product categories and customer states, construct selected interaction terms, and exclude order ID and timestamp from the feature matrix.
-6. **Respect time order.** Sort the records by purchase date; use the first 80% for development and the latest 20% as a holdout. Apply five-fold `TimeSeriesSplit` within the development period.
-7. **Compare models and imbalance treatments.** Evaluate baseline, class-weighted, and SMOTE-based variants where implemented.
-8. **Review errors on the holdout.** Use the classification report and confusion matrix to assess how well late orders are detected, rather than relying on overall accuracy alone.
+1. **Join and clean:** combine order, item, customer, seller, product, and geolocation information.
+2. **Define the target:** flag orders delivered after their estimated delivery date.
+3. **Engineer features:** calculate distance and delivery windows; aggregate order items; derive seller history, product size/weight, and calendar indicators.
+4. **Prepare inputs:** encode categorical features and create selected interactions between distance, shipping windows, seller history, parcel weight, and calendar flags.
+5. **Respect time:** split chronologically and use five-fold `TimeSeriesSplit` within the development period.
+6. **Compare imbalance strategies:** evaluate baseline models, class weighting/positive-class weighting, and SMOTE variants where implemented.
+7. **Interpret and recommend:** combine model diagnostics with EDA, coefficients, and operational context.
 
 ## Feature engineering
 
-The notebook creates features in several business-relevant groups.
-
-| Feature group | Examples | Business interpretation |
+| Feature group | Examples from the notebook | Business meaning |
 |---|---|---|
-| Geographic / logistics | `distance_km`, `avg_distance_km`, `max_distance_km` | Longer seller-to-customer distances may involve more transit time and more opportunities for disruption. |
-| Delivery promises | `shipping_window_days`, `promised_delivery_window_days` | Represents the seller's shipping window and the time allowed between purchase and estimated delivery. |
-| Seller history | `seller_historical_orders`, `delayed_orders_by_seller`, `seller_delay_rate`, `seller_avg_delay_days` | Summarizes seller performance based on outcomes known before the order's purchase time. |
-| Order / freight | `tot_price`, `tot_freight_value` | Captures the order's commercial value and shipping cost. These are predictive inputs, not proof of a causal relationship. |
-| Product characteristics | `sum_product_weight_g`, `sum_product_volumn`, category indicators | Provides a proxy for parcel size, weight, and handling requirements. |
-| Time and seasonality | Purchase month, weekday, hour, weekend, public holiday, Carnival, Black Friday, Christmas-period flags | Captures potential demand peaks and calendar-related constraints. |
-| Geography and product mix | Customer-state and product-category indicators | Represents regional and category-level differences in the order mix. |
-| Interaction terms | Distance × shipping window, seller delay rate × distance, weight × distance, holiday × shipping window | Allows selected combinations of operational factors to have different predictive effects. |
+| Geographic / logistics | `avg_distance_km`, `max_distance_km` | Seller-to-customer distance as a proxy for lane length and transit complexity. |
+| Delivery promises | `shipping_window_days`, `promised_delivery_window_days` | Seller's allowed dispatch window and total promised time from purchase to estimated delivery. These are different concepts. |
+| Seller history | `avg_seller_historical_orders`, `avg_delayed_orders_by_seller`, `avg_seller_delay_rate`, `avg_seller_avg_delay_days` | Historical performance signals that should only use outcomes known before the order. |
+| Order and freight | `tot_price`, `tot_freight_value` | Order value and total freight charge. |
+| Product characteristics | `sum_product_weight_g`, `sum_product_volumn`, category indicators | Parcel size/weight and product-mix proxies. |
+| Time and seasonality | Purchase month, weekday, hour, weekend, public holiday, Carnival, Black Friday, Christmas-period flags | Captures time-related variation in demand or operations. |
+| Region and category | Customer-state and product-category dummies | Controls for persistent differences between regions and product groups. |
+| Interactions | `distance_x_shipping_window`, `seller_delay_x_shipping_window`, `weight_x_avg_distance`, `holiday_x_shipping_window`, `seller_delay_x_distance` | Allows combined patterns to differ from the effect of one feature alone. |
 
-Distance is computed using the Haversine formula from the available latitude and longitude coordinates. Seller-history features are intended to use previously observed delivery outcomes, joined as of the order purchase time. This point-in-time logic is important and should be retained in any refactor.
+Distance is calculated with the Haversine formula from seller and customer coordinates. Point-in-time discipline is important for seller-history features: only orders whose outcomes were known before the prediction date should contribute to a seller's history.
 
-## Modeling strategy
+## Modeling and validation
 
-### Algorithms and imbalance treatments
+### Models and imbalance strategies
 
-- **Logistic Regression:** interpretable baseline; also tested with `class_weight="balanced"` and SMOTE.
-- **Random Forest:** tested with and without class weighting; an SMOTE variant is recorded in the notebook, but its implementation should be corrected and rerun before its score is interpreted.
-- **XGBoost:** tested as a baseline, with `scale_pos_weight` calculated from the training data, and in an `imblearn` pipeline with SMOTE.
+- **Logistic Regression:** interpretable baseline, evaluated without balancing, with `class_weight="balanced"`, and with SMOTE.
+- **Random Forest:** evaluated without balancing, with class weights, and with SMOTE. The SMOTE version has now been corrected to use an `imblearn` pipeline.
+- **XGBoost:** evaluated without balancing, with `scale_pos_weight`, and in an SMOTE pipeline.
 
-The target is imbalanced: late deliveries are much less common than on-time deliveries. This makes recall for the late class particularly relevant if the business cost of missing a risky order is high. However, increasing recall can also produce more false positives, so precision and alert volume must be considered alongside recall.
+SMOTE is fitted within each training fold through an `imblearn.pipeline.Pipeline`; this prevents synthetic samples from being generated from validation data. The Random Forest + SMOTE grid uses `TimeSeriesSplit(n_splits=5)` and `GridSearchCV` with **recall** as the scoring metric.
 
 ### Validation design
 
-- Chronological 80/20 development-versus-test split.
-- Five-fold `TimeSeriesSplit` during model comparison.
-- `random_state=42` in key model and SMOTE components.
-- XGBoost and Random Forest hyperparameter searches use `GridSearchCV` with recall as the scoring function.
+- Chronological 80/20 development/holdout split.
+- Five-fold expanding-window `TimeSeriesSplit` in the development period.
+- Key stochastic steps use `random_state=42`.
+- The holdout is later in time and remains separate from model selection.
 
-**Metric-label clarification:** the notebook prints text such as “Best CV PR-AUC,” but the relevant `GridSearchCV` objects are configured with `scoring="recall"`. The values below are therefore **cross-validation recall scores, not PR-AUC**. The README uses the metric actually computed by the code.
+**Metric note:** some notebook print statements label `best_score_` as “PR-AUC,” but the grid searches use `scoring="recall"`. Those values are **mean cross-validation recall**, not PR-AUC. The README reports the metric that the code actually computes.
 
 ## Results and interpretation
 
 ### 1. Cross-validation model comparison
 
-The following values are recorded in the notebook's development-period cross-validation. They should be treated as model-selection diagnostics, not as final production performance.
+The table below consolidates the recorded model-selection recall scores. The corrected Random Forest + SMOTE result replaces the earlier, incorrectly configured run.
 
-| Model variant | Cross-validation recall | Interpretation |
+| Model variant | Mean CV recall | Interpretation |
 |---|---:|---|
-| Logistic Regression with class weights | **0.7397** | Highest recorded CV recall among the listed variants. |
-| Logistic Regression with SMOTE | 0.7024 | Better late-class recall than the unbalanced baseline. |
-| Random Forest with class weights | 0.4803 | Class weighting improves recall relative to the unweighted RF run. |
-| XGBoost with SMOTE | 0.3840 | Best recorded XGBoost recall variant in these CV runs. |
-| XGBoost with `scale_pos_weight` | 0.3200 | Positive-class weighting improves on the unweighted XGBoost run. |
-| Logistic Regression without balancing | 0.0933 | Low recall for the minority late-delivery class. |
+| Logistic Regression with class weights | **0.7397** | Highest recorded recall in the current comparison. |
+| Logistic Regression with SMOTE | 0.7024 | Strong minority-class recall in cross-validation. |
+| **Random Forest with SMOTE (corrected pipeline)** | **0.5933** | Improved over the earlier invalid setup and above the recorded class-weighted Random Forest result. |
+| Random Forest with class weights | 0.4803 | Better recall than the unweighted Random Forest run. |
+| XGBoost with SMOTE | 0.3840 | Highest recorded XGBoost recall variant. |
+| XGBoost with positive-class weighting | 0.3200 | Better than the unweighted XGBoost run. |
+| Logistic Regression without balancing | 0.0933 | Misses many late orders at the model's default threshold. |
 | XGBoost without balancing | 0.0216 | Very low late-class recall in this imbalanced setting. |
-| Random Forest without balancing | 0.0000 | The run did not identify late orders at the evaluated threshold. |
-| Random Forest with the recorded SMOTE setup* | 0.0000 | Requires implementation review before the result can be trusted. |
+| Random Forest without balancing | 0.0000 | No late orders identified in the recorded cross-validation predictions. |
 
-\* In the exported notebook, the Random Forest + SMOTE cell does not clearly apply SMOTE through an `imblearn` pipeline. Rerun this experiment with the sampler inside a pipeline fitted only on each training fold before drawing a conclusion.
+The corrected Random Forest + SMOTE search evaluated **70 parameter candidates over five folds (350 fits)**. Its best settings were:
 
-**What this suggests:** the imbalance treatment materially changes recall in the current experiments. Class-weighted Logistic Regression is the strongest candidate by the notebook's chosen cross-validation metric, while the unbalanced models largely miss the minority class. This does not, by itself, establish which model is best overall because precision, average precision / PR-AUC, calibration, alert volume, and holdout outcomes must also be compared consistently.
+| Parameter | Selected value |
+|---|---:|
+| `rf__max_depth` | 4 |
+| `rf__min_samples_leaf` | 10 |
+| `rf__min_samples_split` | 2 |
+| `rf__n_estimators` | 300 |
+
+These scores are for model selection under recall scoring; they are not directly equivalent to final held-out precision, F1, or PR-AUC. By recall alone, class-weighted Logistic Regression remains the leading recorded CV candidate, followed by Logistic Regression + SMOTE and the corrected Random Forest + SMOTE.
 
 ### 2. Held-out test performance
 
-The notebook evaluates the class-weighted Logistic Regression model on the latest 20% of orders, using a probability threshold of **0.60**.
+The current held-out report is from the class-weighted Logistic Regression model using a probability threshold of **0.60**.
 
-| Test metric | On-time orders (class 0) | Late orders (class 1) |
-|---|---:|---:|
-| Precision | 0.95 | **0.14** |
-| Recall | 0.94 | **0.17** |
-| F1-score | 0.95 | **0.15** |
-| Support | 18,181 | 1,013 |
+| Late-delivery class metric | Test result |
+|---|---:|
+| Precision | 0.14 |
+| Recall | 0.17 |
+| F1-score | 0.15 |
+| Support (actual late orders) | 1,013 |
+| Overall accuracy | 0.90 |
 
-Overall test accuracy is **0.90** across 19,194 orders.
+![Held-out confusion matrix](assets/figures/test_confusion_matrix.png)
 
-### 3. What the test result actually means
+The confusion matrix shows **168 late orders correctly flagged**, **845 late orders missed**, and **1,017 on-time orders incorrectly flagged**. That is not yet an efficient standalone alert system. The gap from cross-validation can plausibly reflect the changing late rate over time, the selected 0.60 test threshold, and the lack of detailed operational inputs such as carrier scans, warehouse handoff times, and real-time route conditions. The project still creates business value by identifying promising risk dimensions and establishing a reproducible baseline for further testing.
 
-- **Late-order detection is weak.** A recall of 0.17 means the model detects only about 17% of late orders at the chosen threshold and misses roughly 83%.
-- **The positive predictions are noisy.** Precision of 0.14 means most orders flagged as late are not late in the test set. If every alert requires manual intervention, this may create substantial operational workload.
-- **Accuracy is misleading under imbalance.** Since 94.72% of the test set is on time, a naive classifier that predicts “on time” for every order would achieve 94.72% accuracy, although it would detect no late orders. The current model's 90% accuracy is lower than that baseline, so accuracy alone does not demonstrate business value.
-- **Cross-validation and holdout results do not agree.** The best recorded CV recall is 0.740, whereas held-out recall is 0.17. The CV estimate and test report also use different classification thresholds (default model prediction in CV versus 0.60 on test), so they are not directly comparable. Threshold selection, temporal changes in late-delivery rates, and implementation details should be investigated.
-- **Time matters.** Validation-fold late rates in the notebook vary substantially over time, reaching 19.43% in one fold and falling to 7.10% in the final fold. This variability reinforces the need to monitor drift and evaluate on later periods.
+## What the coefficients tell us
 
-### Result conclusion
+The notebook's final feature-relationship chart plots the **15 largest absolute coefficients** from the best class-weighted Logistic Regression pipeline, which includes `StandardScaler`. Positive coefficients push the model toward a higher late-delivery score; negative coefficients push it toward a lower score, conditional on the other features. These are predictive associations, not causal effects.
 
-The project has a sensible business framing and a useful feature-engineering workflow, but the current test report does **not** justify deploying the model as an automated late-delivery predictor. Its appropriate next use is as a baseline for further experimentation. A stronger version should select its operating threshold using validation data, evaluate all candidate models on the same untouched holdout, and report precision-recall metrics and business costs in addition to accuracy.
+![Top Logistic Regression coefficients](assets/figures/logistic_regression_top_coefficients.png)
+
+| Feature | Coefficient | Interpretation for the business |
+|---|---:|---|
+| `promised_delivery_window_days` | **-0.8136** | The strongest negative coefficient. Longer promised windows are associated with a lower modelled late risk; this agrees with the EDA showing higher late rates for very short promises. Review whether the delivery promise leaves enough buffer by lane. |
+| `RJ` (Rio de Janeiro) | **+0.5081** | Higher modelled risk relative to the omitted state baseline (`SP`), after controlling for included features. Treat this as a signal for regional investigation, not a claim that the state itself causes delays. |
+| `avg_distance_km` | **+0.4414** | Longer average seller-to-customer distance raises the modelled late-risk score. This supports lane-specific transit-time and carrier-performance reviews. |
+| `BA` (Bahia) | **+0.2483** | Positive regional association relative to the reference state; validate with order counts and the corrected order-level state analysis. |
+| `purchase_month_3` (March) | **+0.2421** | March has a positive coefficient relative to the omitted month baseline, consistent with the observed spike in March 2018. |
+| `purchase_month_2` (February) | **+0.2216** | February also has a positive coefficient, aligning with the high observed late rate in February 2018. |
+| `SC` (Santa Catarina) | **+0.2196** | Positive conditional regional association relative to the reference state. Investigate route and seller mix before proposing interventions. |
+| `purchase_month_8` (August) | **-0.2260** | Lower modelled risk relative to the omitted month baseline in this fitted model; monthly patterns should be checked on later data. |
+| `purchase_month_7` (July) | **-0.2183** | Lower conditional model score relative to the month baseline. |
+| `shipping_window_days` | **+0.1922** | Positive conditional coefficient for the seller's allowed shipping window. Since the univariate EDA is non-monotonic and interaction terms are included, do not interpret this as a simple rule that every extra day increases risk. |
+| `seller_delay_x_shipping_window` | **+0.1375** | The interaction suggests the combination of seller-delay history and shipping-window length carries information beyond either variable alone. |
+
+Other coefficients offer weaker signals in this model: total product weight (+0.0883), historical delayed-order count by seller (+0.0807), total freight value (+0.0738), and total order price (+0.0552) are positive but smaller than the top coefficients. `avg_seller_delay_rate` is close to zero (-0.0084) after controlling for other inputs, so seller history should be investigated as a bundle of signals rather than assuming a single metric will explain delay.
+
+### Combined interpretation
+
+The EDA and coefficients broadly agree on three dimensions:
+
+1. **Delivery promise:** the 1–7-day promised-window group has a higher observed late rate, and the Logistic Regression coefficient for `promised_delivery_window_days` is strongly negative. Review the feasibility of short promises rather than extending all promises indiscriminately.
+2. **Geography:** distance is positively associated with modelled risk, while state indicators also vary. Focus diagnostics on lanes and regions, with sample-size checks and carrier/seller mix included.
+3. **Time:** observed rates spike in some months and February/March dummies have positive coefficients. Treat calendar periods as planning signals and validate them with newer years before seasonal changes are made.
+
+The product/freight coefficients are smaller in this fitted model than the promise, distance, and some region/time features. This does not rule out handling issues; parcel size and freight may work through interactions or be under-described in the current data.
 
 ## Business recommendations
 
-The following recommendations are hypotheses and operational options informed by the dataset structure and model diagnostics; they should be validated against live fulfillment data before being implemented at scale.
+The project is most useful today as an analytics framework and hypothesis generator. Recommended actions:
 
-### 1. Use predictions as an operational triage signal
+### 1. Review short delivery promises by lane
 
-Once a validated model is available, combine a calibrated risk score with transparent rules to create an exception queue for logistics teams. Initially use it to support human review rather than automatically changing customer promises or escalating every flagged order. Track how many true late orders are caught per 100 alerts.
+Compare promised versus actual delivery outcomes for short-window orders, separated by seller-to-customer distance and region. Identify where a small increase in promised time or a different carrier/service level could be justified, while avoiding blanket extensions that worsen customer experience.
 
-### 2. Improve delivery promises by lane and seller performance
+### 2. Build a regional delivery-performance view
 
-Use historical results to review the delivery windows offered for different seller-to-customer distances and seller reliability levels. If a segment repeatedly misses its promise, examine the assumed transit time, pickup cadence, carrier handoff, and regional fulfillment capacity. Avoid simply extending every delivery estimate, which could protect the on-time metric while worsening the customer experience.
+Recalculate late rates from one row per order, show both rate and sample count on an interactive map, and segment results by seller origin, customer state, and distance band. Prioritize investigation of regions or lanes with persistently high rates and sufficient volume; do not rank small samples without uncertainty checks.
 
-### 3. Strengthen seller-level monitoring
+### 3. Monitor seller performance with point-in-time history
 
-Maintain seller delay rate and average delay severity using only outcomes that were known before each new order. Provide sellers with performance scorecards and prioritize support for sellers with persistent issues. Apply minimum-history thresholds or smoothing so a seller with only a few orders is not judged on an unstable rate.
+Use seller delay counts, average delay severity, and historical reliability together, applying minimum-history requirements or smoothing for low-volume sellers. Ensure each historical feature includes only outcomes known before the order being scored.
 
-### 4. Plan for parcel and distance complexity
+### 4. Plan around higher-risk periods
 
-Review longer-distance lanes and bulky or heavy shipments for routing, consolidation, handling, pickup scheduling, and carrier selection opportunities. The notebook's engineered distance and parcel-size features are useful starting points, but their association with delay should be confirmed with segment-level analysis before assigning operational causes.
+Use monthly and weekday patterns as a starting point for checking campaign volume, warehouse capacity, seller dispatch, and carrier pickup schedules. The 2017–2018 peaks are historical observations, not proof that the same pattern will recur every year.
 
-### 5. Prepare for seasonal and calendar-related peaks
+### 5. Treat parcel and freight signals as secondary hypotheses
 
-Use month, weekday, holiday, and promotional-period features to investigate whether fulfillment capacity and carrier performance change around demand peaks. The current dataset ends in August 2018, so it does not test a later Black Friday or Christmas season as a true future holdout. Seasonal readiness should be measured on newer data.
+Investigate bulky/heavy parcels and higher-freight orders for special handling, packaging, or carrier constraints. The current coefficients show smaller signals than the delivery-window and distance variables, so test these hypotheses against operational records before allocating resources.
 
-### 6. Measure business impact, not only model metrics
+### 6. Pilot a triage workflow, not automatic action
 
-For a pilot, define outcomes such as late deliveries prevented, number of alerts reviewed, false-alert rate, customer contacts, cost per intervention, and on-time delivery improvement versus a control group. These measures will show whether the model changes decisions in a way that creates measurable value.
+Once performance improves, use a calibrated risk score to prioritize human review. Track true late orders caught per 100 alerts, alert workload, customer contacts, cost per intervention, and late deliveries avoided. A controlled pilot is needed to demonstrate operational value.
 
 ## Limitations and next steps
 
-Prioritize the following before presenting the model as a deployable solution:
+The principal limitation is that the current Logistic Regression test results show weak late-order detection at the chosen threshold. Plausible contributors include temporal changes in the late-delivery rate, class imbalance, and missing real-time logistics signals. The EDA and coefficient findings remain useful for prioritizing further analysis, but should be validated before implementation.
 
-1. **Fix metric reporting.** Rename the current CV output to recall. If PR-AUC is desired, explicitly use `scoring="average_precision"` and report it separately from ROC-AUC and recall.
-2. **Use a consistent evaluation protocol.** Compare all shortlisted models on the same untouched chronological holdout and document the exact threshold used for every reported metric.
-3. **Tune the threshold on validation data only.** Select it based on the cost of missed late orders versus false alerts; do not use test labels to choose it. Report a precision-recall curve and confusion matrix at the selected threshold.
-4. **Fix and rerun Random Forest + SMOTE.** Implement resampling through an `imblearn.pipeline.Pipeline` so synthetic samples are created only from each training fold. Review other notebook cells for stale outputs or code/output mismatches.
-5. **Audit temporal and feature leakage.** Keep seller-history features strictly point-in-time. Fit preprocessing and any feature-selection steps on training data only, and split on a clear date boundary so a calendar date is not shared across train and test.
-6. **Improve the baseline and calibration.** Compare against simple baselines, inspect score calibration, and report average precision, per-class precision/recall/F1, alert rates, and expected business cost.
-7. **Add more recent operational data.** Carrier scans, actual handoff times, warehouse processing, route/transport events, regional capacity, and weather or disruption signals could explain risks that are not observable in the current historical tables.
-8. **Check generalization.** Evaluate across later time periods, major Brazilian regions, seller cohorts, and product categories; monitor drift after deployment.
+Recommended next steps:
 
-Additional implementation note: the exported notebook uses absolute Windows paths such as `C:/Users/Ed/Desktop/DA/Brazilian E-Commerce/...`. These need to be replaced with repository-relative paths before another person can run the workflow. The choropleth step also downloads a Brazil state GeoJSON file from an external URL, so that visualization requires an internet connection unless the GeoJSON is stored locally.
+1. Recompute the state map and category performance using **one row per order**, and add sample sizes to the map tooltips.
+2. Correct the mislabeled promised-window bucket and investigate extreme shipping-window outliers (including the reported value above 1,000 days).
+3. Compare models on the same untouched chronological holdout, using a threshold selected on validation data only; report PR-AUC/average precision, precision, recall, F1, calibration, and alert rate.
+4. Audit seller-history features for strict point-in-time availability and retain SMOTE inside training-fold pipelines.
+5. Add more recent and granular signals where available: carrier scans, warehouse processing, dispatch/pickup times, carrier/route, regional capacity, and delivery exceptions.
+6. Replace absolute Windows paths in the notebook with repository-relative paths and pin dependency versions for reproducibility.
 
 ## Reproducing the analysis
 
 ### 1. Download the data
 
-Download the [Olist dataset from Kaggle](https://www.kaggle.com/olistbr/brazilian-ecommerce), review its current license terms, and place the required CSV files in a local data directory. The raw data is not included in this repository.
+Download the [Olist dataset from Kaggle](https://www.kaggle.com/olistbr/brazilian-ecommerce), review the dataset's current license and attribution requirements, and place the required CSV files under a local `data/` directory. The raw data is not included in this repository.
 
-### 2. Set up the environment
-
-The notebook imports the following third-party packages (exact versions are not pinned in the supplied export):
+### 2. Install the environment
 
 ```bash
-pip install numpy pandas matplotlib seaborn scikit-learn xgboost imbalanced-learn statsmodels folium branca requests jupyter
+pip install -r requirements.txt
 ```
 
 ### 3. Run the notebook
 
-Open the executable Jupyter notebook and run cells in order. Update the data-loading paths to match your local `data/` directory first. The supplied artifact is an **HTML notebook export**; for a reproducible GitHub repository, include the source `.ipynb` as well as the HTML snapshot if available.
+Open the executable `.ipynb` source if available and run cells in order after updating the data paths. This repository package includes the exported HTML notebook for inspection; the HTML export is not a substitute for the source notebook when reproducing the analysis.
 
-Because resampling and model selection can be computationally intensive, start with the baseline Logistic Regression runs before executing the full XGBoost grid search.
+The full XGBoost and Random Forest grid searches can be computationally expensive. Start by reproducing EDA and Logistic Regression, then run the tuning experiments.
 
-## Suggested repository structure
+## Publishing the interactive map on GitHub
+
+GitHub README Markdown does not provide a reliable way to execute an embedded Folium/Leaflet map in an `<iframe>`. Use a static image as the README preview and host the standalone HTML file with **GitHub Pages** for interactivity. The exported map is included at `docs/late_delivery_rate_brazil_map.html` and relies on browser access to the external Leaflet/CDN and OpenStreetMap tile resources.
+
+1. Commit `docs/late_delivery_rate_brazil_map.html` and the README to your repository.
+2. Open **Settings → Pages** in the GitHub repository.
+3. Under **Build and deployment**, choose **Deploy from a branch**, select your default branch (for example `main`) and choose the `/docs` folder, then save. GitHub Pages can publish a folder from a repository branch; see the [official publishing-source documentation](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site).
+4. When Pages has published, open the map at:
+
+   `https://<YOUR-USERNAME>.github.io/<YOUR-REPOSITORY>/late_delivery_rate_brazil_map.html`
+
+5. Replace the placeholder with your real Pages URL and add a link in the README, for example:
+
+   `[Open the interactive late-delivery map](https://<YOUR-USERNAME>.github.io/<YOUR-REPOSITORY>/late_delivery_rate_brazil_map.html)`
+
+The static preview remains visible in the README even before Pages is enabled. The relative HTML source link is useful for repository access, but it may display the source rather than render the interactive map until hosted.
+
+## Repository structure
 
 ```text
 .
 ├── README.md
 ├── notebooks/
-│   ├── Brazilian-E-Commerce_v5.1.ipynb   # executable source notebook
-│   └── Brazilian-E-Commerce_v5.1.html     # optional rendered notebook
-├── data/                                  # local data; do not commit raw files by default
-├── outputs/
-│   ├── figures/
-│   └── metrics/
-└── requirements.txt                       # recommended for reproducibility
+│   └── BrazilianE-Commerce_v5.1.html
+├── assets/
+│   └── figures/
+│       ├── eda_late_vs_on_time_share.png
+│       ├── eda_top_product_categories.png
+│       ├── eda_orders_by_state.png
+│       ├── eda_late_delivery_rate_brazil_map.png
+│       ├── eda_numeric_feature_distributions.png
+│       ├── eda_shipping_window_distribution.png
+│       ├── eda_late_rate_by_shipping_window.png
+│       ├── eda_promised_window_distribution.png
+│       ├── eda_late_rate_by_promised_window.png
+│       ├── eda_monthly_late_delivery_rate.png
+│       ├── test_confusion_matrix.png
+│       └── logistic_regression_top_coefficients.png
+├── docs/
+│   └── late_delivery_rate_brazil_map.html
+├── data/                 # Local raw data; do not commit by default
+└── requirements.txt
 ```
 
-## References and data attribution
+## References
 
-1. **Olist.** *Brazilian E-Commerce Public Dataset by Olist.* Kaggle. [Dataset page](https://www.kaggle.com/olistbr/brazilian-ecommerce). The dataset page describes approximately 100,000 Brazilian marketplace orders from 2016–2018 and the related order, customer, item, seller, product, and geolocation tables. Please follow the dataset's current attribution and license terms.
-2. **Hartman, N., Sarkar, S., & Alhamadani, A. (2026).** *Learning to Predict Delivery Delays: An Analytical Study of Machine Learning and Oversampling Strategies.* Proceedings of the 2026 9th International Conference on Information and Computer Technologies, pp. 127–135. [https://doi.org/10.1145/3803291.3803322](https://doi.org/10.1145/3803291.3803322). The study compares seven classifiers under manual balancing and SMOTE and reports distance, estimated shipping days, freight value, and item physical score among influential predictors. These findings provide useful context for feature design, but its feature set, sampling setup, and evaluation results differ from this notebook and should not be treated as this repository's performance.
+1. **Olist.** *Brazilian E-Commerce Public Dataset by Olist.* Kaggle. [Dataset page](https://www.kaggle.com/olistbr/brazilian-ecommerce). Follow the current dataset license and attribution requirements.
+2. **Hartman, N., Sarkar, S., & Alhamadani, A. (2026).** *Learning to Predict Delivery Delays: An Analytical Study of Machine Learning and Oversampling Strategies.* Proceedings of the 2026 9th International Conference on Information and Computer Technologies, pp. 127–135. [https://doi.org/10.1145/3803291.3803322](https://doi.org/10.1145/3803291.3803322). This study compares seven classifiers under manual balancing and SMOTE, and identifies distance, estimated shipping days, freight value, and item physical score as influential predictors. Its experiment differs from this notebook and is cited as methodological context, not as evidence of this project's performance.
 
 ---
 
-*This README documents the supplied notebook export and its recorded results. Metrics should be regenerated after any changes to data preparation, features, resampling, model selection, or decision thresholds.*
+*This README documents the supplied notebook export and updated Random Forest + SMOTE result. Regenerate the figures and metrics after changes to data preparation, feature engineering, sampling, model selection, or decision thresholds.*
