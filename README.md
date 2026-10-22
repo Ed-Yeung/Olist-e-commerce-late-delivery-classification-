@@ -222,7 +222,7 @@ The table below consolidates the recorded model-selection recall scores. The cor
 |---|---:|---|
 | Logistic Regression with class weights | **0.7397** | Highest recorded recall in the current comparison. |
 | Logistic Regression with SMOTE | 0.7024 | Strong minority-class recall in cross-validation. |
-| **Random Forest with SMOTE (corrected pipeline)** | **0.5933** | Improved over the earlier invalid setup and above the recorded class-weighted Random Forest result. |
+| Random Forest with SMOTE (corrected pipeline) | 0.5933 | above the recorded class-weighted Random Forest result. |
 | Random Forest with class weights | 0.4803 | Better recall than the unweighted Random Forest run. |
 | XGBoost with SMOTE | 0.3840 | Highest recorded XGBoost recall variant. |
 | XGBoost with positive-class weighting | 0.3200 | Better than the unweighted XGBoost run. |
@@ -230,16 +230,6 @@ The table below consolidates the recorded model-selection recall scores. The cor
 | XGBoost without balancing | 0.0216 | Very low late-class recall in this imbalanced setting. |
 | Random Forest without balancing | 0.0000 | No late orders identified in the recorded cross-validation predictions. |
 
-The corrected Random Forest + SMOTE search evaluated **70 parameter candidates over five folds (350 fits)**. Its best settings were:
-
-| Parameter | Selected value |
-|---|---:|
-| `rf__max_depth` | 4 |
-| `rf__min_samples_leaf` | 10 |
-| `rf__min_samples_split` | 2 |
-| `rf__n_estimators` | 300 |
-
-These scores are for model selection under recall scoring; they are not directly equivalent to final held-out precision, F1, or PR-AUC. By recall alone, class-weighted Logistic Regression remains the leading recorded CV candidate, followed by Logistic Regression + SMOTE and the corrected Random Forest + SMOTE.
 
 ### 2. Held-out test performance
 
