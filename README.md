@@ -320,41 +320,6 @@ Recommended next steps:
 5. Add more recent and granular signals where available: carrier scans, warehouse processing, dispatch/pickup times, carrier/route, regional capacity, and delivery exceptions.
 6. Replace absolute Windows paths in the notebook with repository-relative paths and pin dependency versions for reproducibility.
 
-## Reproducing the analysis
-
-### 1. Download the data
-
-Download the [Olist dataset from Kaggle](https://www.kaggle.com/olistbr/brazilian-ecommerce), review the dataset's current license and attribution requirements, and place the required CSV files under a local `data/` directory. The raw data is not included in this repository.
-
-### 2. Install the environment
-
-```bash
-pip install -r requirements.txt
-```
-
-### 3. Run the notebook
-
-Open the executable `.ipynb` source if available and run cells in order after updating the data paths. This repository package includes the exported HTML notebook for inspection; the HTML export is not a substitute for the source notebook when reproducing the analysis.
-
-The full XGBoost and Random Forest grid searches can be computationally expensive. Start by reproducing EDA and Logistic Regression, then run the tuning experiments.
-
-## Publishing the interactive map on GitHub
-
-GitHub README Markdown does not provide a reliable way to execute an embedded Folium/Leaflet map in an `<iframe>`. Use a static image as the README preview and host the standalone HTML file with **GitHub Pages** for interactivity. The exported map is included at `docs/late_delivery_rate_brazil_map.html` and relies on browser access to the external Leaflet/CDN and OpenStreetMap tile resources.
-
-1. Commit `docs/late_delivery_rate_brazil_map.html` and the README to your repository.
-2. Open **Settings → Pages** in the GitHub repository.
-3. Under **Build and deployment**, choose **Deploy from a branch**, select your default branch (for example `main`) and choose the `/docs` folder, then save. GitHub Pages can publish a folder from a repository branch; see the [official publishing-source documentation](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site).
-4. When Pages has published, open the map at:
-
-   `https://<YOUR-USERNAME>.github.io/<YOUR-REPOSITORY>/late_delivery_rate_brazil_map.html`
-
-5. Replace the placeholder with your real Pages URL and add a link in the README, for example:
-
-   `[Open the interactive late-delivery map](https://<YOUR-USERNAME>.github.io/<YOUR-REPOSITORY>/late_delivery_rate_brazil_map.html)`
-
-The static preview remains visible in the README even before Pages is enabled. The relative HTML source link is useful for repository access, but it may display the source rather than render the interactive map until hosted.
-
 ## Repository structure
 
 ```text
@@ -385,7 +350,7 @@ The static preview remains visible in the README even before Pages is enabled. T
 ## References
 
 1. **Olist.** *Brazilian E-Commerce Public Dataset by Olist.* Kaggle. [Dataset page](https://www.kaggle.com/olistbr/brazilian-ecommerce). Follow the current dataset license and attribution requirements.
-2. **Hartman, N., Sarkar, S., & Alhamadani, A. (2026).** *Learning to Predict Delivery Delays: An Analytical Study of Machine Learning and Oversampling Strategies.* Proceedings of the 2026 9th International Conference on Information and Computer Technologies, pp. 127–135. [https://doi.org/10.1145/3803291.3803322](https://doi.org/10.1145/3803291.3803322). This study compares seven classifiers under manual balancing and SMOTE, and identifies distance, estimated shipping days, freight value, and item physical score as influential predictors. Its experiment differs from this notebook and is cited as methodological context, not as evidence of this project's performance.
+
 
 ---
 
