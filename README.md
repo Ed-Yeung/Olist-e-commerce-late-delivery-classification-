@@ -313,12 +313,10 @@ The principal limitation is that the current Logistic Regression test results sh
 
 Recommended next steps:
 
-1. Recompute the state map and category performance using **one row per order**, and add sample sizes to the map tooltips.
-2. Correct the mislabeled promised-window bucket and investigate extreme shipping-window outliers (including the reported value above 1,000 days).
-3. Compare models on the same untouched chronological holdout, using a threshold selected on validation data only; report PR-AUC/average precision, precision, recall, F1, calibration, and alert rate.
-4. Audit seller-history features for strict point-in-time availability and retain SMOTE inside training-fold pipelines.
-5. Add more recent and granular signals where available: carrier scans, warehouse processing, dispatch/pickup times, carrier/route, regional capacity, and delivery exceptions.
-6. Replace absolute Windows paths in the notebook with repository-relative paths and pin dependency versions for reproducibility.
+1. investigate extreme shipping-window outliers (including the reported value above 1,000 days).
+2. Audit seller-history features for strict point-in-time availability 
+3. Add more recent and granular signals where available: carrier scans, warehouse processing, dispatch/pickup times, carrier/route, regional capacity, and delivery exceptions.
+
 
 ## Repository structure
 
